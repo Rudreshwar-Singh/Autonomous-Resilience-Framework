@@ -1,0 +1,195 @@
+# ============================================================
+# Autonomous Resilience Framework — Phase 2 Docker Infrastructure
+# ============================================================
+# Services: Zookeeper, Kafka, Prometheus, Grafana
+#
+# KAFKA NETWORKING DESIGN (Windows 11 Host):
+#   Two listener protocols solve the dual-network problem:
+#   - PLAINTEXT (INTERNAL): Docker-internal services use the "kafka" hostname
+#     on port 29092 via Docker's bridge network.
+#   - PLAINTEXT_HOST (EXTERNAL): The host-OS FastAPI app uses localhost:9092,
+#     which Docker maps through the published port binding.
+#
+# PERSISTENCE STRATEGY:
+#   Named Docker volumes persist Prometheus TSDB and Grafana state across
+#   "docker-compose down". Use "docker-compose down -v" ONLY when you
+#   intentionally want to wipe all metrics and dashboard state.
+#
+# CONSTRAINT: FastAPI is intentionally ABSENT from this file.
+#   It runs directly on the host OS via uvicorn. During Phase 2, we validate
+#   the infrastructure layer in isolation before wiring domain logic to it.
+# ============================================================
+
+# version key intentionally omitted — obsolete in modern Docker Compose (v2.x+)
+
+# ── Named Volumes ─────────────────────────────────────────────────────────────
+volumes:
+  zookeeper_data:
+    driver: local
+  zookeeper_log:
+    driver: local
+  kafka_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# ── Internal Bridge Network ───────────────────────────────────────────────────
+# All services share one bridge network so they resolve each other by
+# service name (e.g., Prometheus scrapes "kafka:9101").
+networks:
+  arf_net:
+    driver: bridge
+
+# ── Services ──────────────────────────────────────────────────────────────────
+services:
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # ZOOKEEPER
+  # Coordinates Kafka broker metadata: controller election, topic configuration.
+  # ──────────────────────────────────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: arf_zookeeper
+    restart: unless-stopped
+    networks:
+      - arf_net
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_SYNC_LIMIT: 2
+      # srvr is enabled by default — no whitelist env var needed for the healthcheck below
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
+    healthcheck:
+      test: ["CMD-SHELL", "echo srvr | nc localhost 2181 | grep Mode || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # KAFKA BROKER
+  # ──────────────────────────────────────────────────────────────────────────
+  # LISTENER BREAKDOWN (CRITICAL — Windows 11 host):
+  #
+  #   KAFKA_LISTENERS — sockets the broker binds on all interfaces:
+  #     PLAINTEXT://0.0.0.0:29092   → internal Docker-to-Docker traffic
+  #     PLAINTEXT_HOST://0.0.0.0:9092 → external / host-OS traffic
+  #
+  #   KAFKA_ADVERTISED_LISTENERS — address returned to clients after discovery:
+  #     PLAINTEXT://kafka:29092     → containers use Docker DNS hostname "kafka"
+  #     PLAINTEXT_HOST://localhost:9092 → host FastAPI uses localhost
+  #
+  #   KAFKA_INTER_BROKER_LISTENER_NAME — broker-to-broker replication uses
+  #   the internal PLAINTEXT listener only.
+  # ──────────────────────────────────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: arf_kafka
+    restart: unless-stopped
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    networks:
+      - arf_net
+    ports:
+      - "9092:9092"       # External: host FastAPI → localhost:9092
+      - "29092:29092"     # Internal: Docker-to-Docker
+      - "9101:9101"       # JMX metrics (Prometheus JMX Exporter)
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+
+      KAFKA_BROKER_ID: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+      KAFKA_LOG4J_LOGGERS: "kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO"
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_NUM_PARTITIONS: 3
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # PROMETHEUS
+  # Scrapes and stores time-series metrics. Config mounted from infra/monitoring.
+  # ──────────────────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: arf_prometheus
+    restart: unless-stopped
+    networks:
+      - arf_net
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
+      - "--log.level=info"
+    volumes:
+      - ../../infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # GRAFANA
+  # Visualization layer. Data sources and dashboards are provisioned from
+  # infra/monitoring/grafana/provisioning — version-controlled, no manual
+  # UI setup required after a fresh clone.
+  # ──────────────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana-oss:10.4.3
+    container_name: arf_grafana
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    networks:
+      - arf_net
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: arf_admin_2026
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+      GF_LOG_LEVEL: info
+    volumes:
+      - ../../infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s

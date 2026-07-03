@@ -1,0 +1,57 @@
+# ============================================================
+# Autonomous Resilience Framework — Prometheus Scrape Config
+# ============================================================
+# Edit this file to add new scrape targets as services come online.
+# After editing, hot-reload with: curl -X POST http://localhost:9090/-/reload
+#
+# HOST OS TARGETS (host.docker.internal):
+#   Prometheus runs inside Docker, so it cannot reach "localhost" on the host.
+#   Use the special Docker DNS name "host.docker.internal" to scrape services
+#   running on your Windows host machine (e.g., the FastAPI app).
+# ============================================================
+
+global:
+  scrape_interval: 15s         # How frequently to scrape targets
+  evaluation_interval: 15s     # How frequently to evaluate alert rules
+  scrape_timeout: 10s
+  external_labels:
+    environment: "development"
+    project: "autonomous-resilience-framework"
+
+# ── Rule Files (alerting rules — add in Phase 5) ─────────────────────────────
+rule_files:
+  # - "alert_rules.yml"
+
+# ── Alertmanager (wire in Phase 5) ───────────────────────────────────────────
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ["alertmanager:9093"]
+
+# ── Scrape Targets ────────────────────────────────────────────────────────────
+scrape_configs:
+
+  # Prometheus scrapes itself for meta-metrics (scrape duration, samples, etc.)
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          service: "prometheus"
+
+  # FastAPI application — running on host OS (not in Docker)
+  # host.docker.internal resolves to the Windows host machine from within Docker
+  - job_name: "arf_fastapi"
+    scrape_interval: 10s
+    metrics_path: "/metrics"    # Will be exposed by prometheus-fastapi-instrumentator in Phase 5
+    static_configs:
+      - targets: ["host.docker.internal:8000"]
+        labels:
+          service: "arf-backend"
+          component: "fastapi"
+
+  # Grafana internal metrics
+  - job_name: "grafana"
+    static_configs:
+      - targets: ["grafana:3000"]
+        labels:
+          service: "grafana"

@@ -1,0 +1,22 @@
+# ============================================================
+# Grafana Data Source Provisioning
+# ============================================================
+# This file auto-registers Prometheus as a data source on first boot.
+# No manual "Add data source" steps required in the Grafana UI.
+#
+# Reference: https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources
+# ============================================================
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    # "prometheus" resolves via Docker's internal bridge network (arf_net)
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      exemplarTraceIdDestinations: []

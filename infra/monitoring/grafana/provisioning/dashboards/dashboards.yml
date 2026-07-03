@@ -1,0 +1,21 @@
+# ============================================================
+# Grafana Dashboard Provisioning
+# ============================================================
+# Tells Grafana where to find JSON dashboard definitions.
+# Place dashboard .json files in the "dashboards/" folder next to this file.
+#
+# Reference: https://grafana.com/docs/grafana/latest/administration/provisioning/#dashboards
+# ============================================================
+
+apiVersion: 1
+
+providers:
+  - name: "ARF Dashboards"
+    orgId: 1
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: true
