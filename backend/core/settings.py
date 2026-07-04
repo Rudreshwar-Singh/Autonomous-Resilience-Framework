@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:3001",   # Next.js fallback port when 3000 is in use
+        "http://127.0.0.1:3001",
     ]
 
     # ── Logging ───────────────────────────────────────────────────────

@@ -238,7 +238,7 @@ uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 | **1** | Backend Foundation — FastAPI shell, `/healthz`, structured logging, Swagger | ✅ Complete |
 | **2** | Docker Infrastructure — Kafka, Zookeeper, Prometheus, Grafana containers | ✅ Complete |
 | **3** | Windows Scripts — PowerShell automation (`dev.ps1`) | ✅ Complete |
-| **4** | Frontend Dashboard — Next.js + shadcn/ui observability UI | ⬚ Planned |
+| **4** | Frontend Dashboard — Next.js + shadcn/ui observability UI | ✅ Complete |
 | **5** | Telemetry Pipeline — Kafka producer/consumer for log streaming | ⬚ Planned |
 | **6** | NetworkX Brain — Dependency graph construction from telemetry data | ⬚ Planned |
 | **7** | AI Agent — LLM-powered diagnosis & deterministic remediation engine | ⬚ Planned |

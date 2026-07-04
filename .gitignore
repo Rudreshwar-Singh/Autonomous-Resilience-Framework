@@ -73,8 +73,10 @@ backend/logs/*.log
 # Local AI / IDE workflow (not part of the product)
 # ══════════════════════════════════════════════════════════════════════
 .cursorrules
-PROJECT_BIBLE/99_ai_rules.md
 .cursor/
+PROJECT_BIBLE/99_ai_rules.md
+frontend/AGENTS.md
+frontend/CLAUDE.md
 
 # ══════════════════════════════════════════════════════════════════════
 # Misc
