@@ -16,7 +16,7 @@ FUTURE EXTENSIBILITY:
     As new phases are built, add new fields here:
     - Phase 5 (Current): KAFKA_BOOTSTRAP_SERVERS, KAFKA_TOPIC_TELEMETRY
     - Phase 6: PROMETHEUS_PORT, GRAFANA_URL
-    - Phase 7: GEMINI_API_KEY, LLM_MODEL_NAME, LLM_TEMPERATURE
+    - Phase 7: GEMINI_API_KEY, GEMINI_MODEL (now implemented)
 """
 
 from functools import lru_cache
@@ -47,6 +47,13 @@ class Settings(BaseSettings):
                                   Matches the Docker-Compose service on port 9092
                                   for local dev; override per environment.
         KAFKA_TOPIC_TELEMETRY: The Kafka topic name for inbound telemetry events.
+        GEMINI_API_KEY: Google Gemini API key (free-tier). Set via environment
+                        variable ``GEMINI_API_KEY`` or in a local ``.env`` file.
+                        Per 98_project_constraints.md, only free-tier APIs are
+                        permitted — never commit this value to source control.
+        GEMINI_MODEL: The Gemini model identifier used by the Decision Engine.
+                      Defaults to ``gemini-2.5-flash`` for speed and free-tier
+                      availability. Override per environment if needed.
     """
 
     # ── Application Identity ──────────────────────────────────────────
@@ -75,6 +82,17 @@ class Settings(BaseSettings):
     # Override via environment variable for staging/production brokers.
     KAFKA_BOOTSTRAP_SERVERS: str = "localhost:9092"
     KAFKA_TOPIC_TELEMETRY: str = "system-telemetry"
+
+    # ── Phase 7: AI Decision Engine ───────────────────────────────────
+    # GEMINI_API_KEY is intentionally blank by default so the application
+    # boots without a key in non-agent contexts (health checks, graph
+    # analysis).  The DecisionEngine validates its presence at call time,
+    # not at startup — keeping the server lightweight.
+    #
+    # Set via PowerShell: $env:GEMINI_API_KEY="AIza..."
+    # or via .env file:   GEMINI_API_KEY=AIza...
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.5-flash"
 
     # ── Pydantic Model Configuration ──────────────────────────────────
     # Tells Pydantic to read from a .env file if one exists, and to

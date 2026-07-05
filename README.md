@@ -137,21 +137,32 @@ Autonomous-Resilience-Framework/
 │   ├── app/                    # FastAPI application entry point
 │   │   ├── main.py             # Application factory, lifespan, /healthz
 │   │   ├── routers/            # API endpoint routers (per domain)
+│   │   │   ├── telemetry.py    # POST /api/v1/telemetry — log ingestion
+│   │   │   ├── graph.py        # POST /api/v1/graph/analyze — topology engine  [Phase 6]
+│   │   │   ├── incident.py     # /api/v1/incident — incident lifecycle
+│   │   │   ├── health.py       # /api/v1/health — dependency health checks
+│   │   │   └── agent.py        # /api/v1/agent — AI remediation triggers
 │   │   └── dependencies.py     # FastAPI dependency injection
+│   ├── services/               # Business logic layer
+│   │   ├── kafka_producer.py   # Lifecycle-managed Kafka producer service
+│   │   └── graph_analyzer.py   # NetworkX DiGraph builder + GraphPayload export  [Phase 6]
 │   ├── core/                   # Shared infrastructure
 │   │   ├── settings.py         # Pydantic BaseSettings configuration
 │   │   ├── logging.py          # Structured JSON logging setup
 │   │   ├── config.py           # Additional config utilities
 │   │   ├── exceptions.py       # Custom exception hierarchy
 │   │   └── security.py         # Auth utilities (future phases)
-│   ├── contracts/              # Cross-domain data contracts
+│   ├── contracts/              # Cross-domain data contracts (single source of truth)
 │   │   ├── api/                # Request/response Pydantic models
-│   │   └── events/             # Event schemas (Kafka messages)
-│   ├── services/               # Business logic layer
+│   │   └── events/
+│   │       ├── telemetry.py    # TelemetryEvent — flat service log schema
+│   │       └── trace.py        # TraceEvent + ErrorMetadata — hop-level schema  [Phase 6]
 │   ├── models/                 # Domain models
 │   ├── schemas/                # Data schemas
 │   ├── middleware/             # Custom middleware
 │   ├── utils/                  # Shared utilities
+│   ├── telemetry/              # Kafka consumer worker (standalone process)
+│   │   └── consumer.py         # Polls system-telemetry topic, validates TelemetryEvent
 │   ├── logs/                   # File-based log storage
 │   └── requirements.txt        # Python dependencies
 │
@@ -222,11 +233,60 @@ uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 
 ### Verify Installation
 
-| Endpoint | Expected Result |
-|----------|----------------|
-| [http://127.0.0.1:8000/healthz](http://127.0.0.1:8000/healthz) | `{"status": "healthy", ...}` |
-| [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) | Interactive Swagger UI |
-| [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc) | ReDoc API documentation |
+| Endpoint | Method | Expected Result |
+|----------|--------|-----------------|
+| [http://127.0.0.1:8000/healthz](http://127.0.0.1:8000/healthz) | `GET` | `{"status": "healthy", ...}` |
+| [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) | `GET` | Interactive Swagger UI |
+| [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc) | `GET` | ReDoc API documentation |
+| [http://127.0.0.1:8000/api/v1/graph/health](http://127.0.0.1:8000/api/v1/graph/health) | `GET` | `{"status": "operational", "domain": "analysis", ...}` |
+
+### Phase 6 — Run the Graph Topology Engine
+
+```bash
+# Run the test harness directly (no server needed)
+python -m backend.app.services.graph_analyzer
+```
+
+Expected output — a clean JSON graph payload with cascading failure detected:
+```json
+{
+  "nodes": [
+    { "id": "Client",       "status": "success" },
+    { "id": "API-Gateway",  "status": "success" },
+    { "id": "Auth-Service", "status": "failed",   "error_metadata": { "error_code": "500_INTERNAL_SERVER_ERROR" } },
+    { "id": "User-DB",      "status": "failed",   "error_metadata": { "error_code": "DB_TIMEOUT_ERROR" } },
+    { "id": "Notification-Service", "status": "degraded" }
+  ],
+  "edges": [
+    { "source": "Client",       "target": "API-Gateway",  "weight": 1 },
+    { "source": "API-Gateway",  "target": "Auth-Service", "weight": 2 },
+    { "source": "Auth-Service", "target": "User-DB",      "weight": 1 }
+  ],
+  "meta": {
+    "root_cause_candidate": "Auth-Service",
+    "blast_radius": ["Client", "API-Gateway"]
+  }
+}
+```
+
+### Phase 6 — Test the Analysis REST API
+
+```bash
+# Start the server
+uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
+
+# POST trace events to build the dependency graph
+curl -X POST http://127.0.0.1:8000/api/v1/graph/analyze \
+  -H "Content-Type: application/json" \
+  -d '[
+    {"trace_id": "req-001", "timestamp": "2026-07-05T12:00:01Z", "source_node": "Client", "target_node": "API-Gateway", "status": "success"},
+    {"trace_id": "req-001", "timestamp": "2026-07-05T12:00:02Z", "source_node": "API-Gateway", "target_node": "Auth-Service", "status": "failed",
+     "error_metadata": {"error_code": "500_INTERNAL_SERVER_ERROR", "message": "Auth dependency failed"}}
+  ]'
+
+# Poll the cached topology (for frontend dashboard)
+curl http://127.0.0.1:8000/api/v1/graph/topology
+```
 
 ---
 
@@ -240,7 +300,7 @@ uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 | **3** | Windows Scripts — PowerShell automation (`dev.ps1`) | ✅ Complete |
 | **4** | Frontend Dashboard — Next.js + shadcn/ui observability UI | ✅ Complete |
 | **5** | Telemetry Pipeline — Kafka producer/consumer for log streaming | ✅ Complete |
-| **6** | NetworkX Brain — Dependency graph construction from telemetry data | ⬚ Planned |
+| **6** | NetworkX Brain — Dependency graph construction from telemetry data | ✅ Complete |
 | **7** | AI Agent — LLM-powered diagnosis & deterministic remediation engine | ⬚ Planned |
 | **8** | Testing Suite — Pytest unit, integration, and load tests | ⬚ Planned |
 | **9** | Presentation — Demo deck, live walkthrough script, fault scenarios | ⬚ Planned |

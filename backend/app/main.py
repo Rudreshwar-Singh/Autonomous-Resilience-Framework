@@ -66,6 +66,7 @@ from backend.core.settings import get_settings
 # endpoints. main.py only mounts them — it never inspects their internals.
 # This enforces the bounded-context principle from 01_architecture.md.
 from backend.app.routers import agent, graph, health, incident, telemetry
+from backend.app.services.decision_engine import DecisionEngine
 from backend.app.services.kafka_producer import KafkaProducerService
 
 # ── Module-level logger ───────────────────────────────────────────────
@@ -130,6 +131,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # can serve the frontend without reprocessing on every poll cycle.
     app.state.graph_cache = None
     logger.info("Graph cache initialised — ready for Phase 6 Analysis domain")
+
+    # ── Phase 7: AI Decision Engine warm-up ─────────────────────────────
+    # We initialise the DecisionEngine once here so the underlying
+    # genai.Client HTTP connection pool is reused across all requests.
+    # If GEMINI_API_KEY is not set, we skip initialisation gracefully —
+    # the server still boots and all non-agent endpoints remain healthy.
+    if settings.GEMINI_API_KEY:
+        app.state.decision_engine = DecisionEngine(
+            api_key=settings.GEMINI_API_KEY,
+            model=settings.GEMINI_MODEL,
+        )
+        logger.info(
+            "DecisionEngine initialised — model=%s",
+            settings.GEMINI_MODEL,
+        )
+    else:
+        app.state.decision_engine = None
+        logger.warning(
+            "GEMINI_API_KEY is not set — DecisionEngine disabled. "
+            "POST /api/v1/agent/remediate will return 503 until the key is provided."
+        )
 
     yield  # ← Application serves requests here
 
