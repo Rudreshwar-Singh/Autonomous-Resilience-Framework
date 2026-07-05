@@ -66,6 +66,7 @@ from backend.core.settings import get_settings
 # endpoints. main.py only mounts them — it never inspects their internals.
 # This enforces the bounded-context principle from 01_architecture.md.
 from backend.app.routers import agent, health, incident, telemetry
+from backend.app.services.kafka_producer import KafkaProducerService
 
 # ── Module-level logger ───────────────────────────────────────────────
 # Created here but only usable AFTER setup_logging() is called in lifespan.
@@ -109,10 +110,31 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.APP_VERSION,
     )
 
+    # ── Kafka Producer — Phase 5 ───────────────────────────────────────
+    # Instantiate once here so the single underlying socket is reused for
+    # every request.  Attaching to app.state makes it accessible from any
+    # router via `request.app.state.kafka_producer` without circular imports.
+    kafka_producer = KafkaProducerService(
+        bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS
+    )
+    app.state.kafka_producer = kafka_producer
+    logger.info(
+        "Kafka producer ready — bootstrap_servers=%s topic=%s",
+        settings.KAFKA_BOOTSTRAP_SERVERS,
+        settings.KAFKA_TOPIC_TELEMETRY,
+    )
+
     yield  # ← Application serves requests here
 
-    # ── SHUTDOWN ──────────────────────────────────────────────────────
+    # ── SHUTDOWN ───────────────────────────────────────────────────────
     logger.info("Application shutdown initiated — cleaning up resources")
+
+    # ── Kafka Producer teardown ─────────────────────────────────────
+    # flush() blocks until all buffered messages are acknowledged by the
+    # broker (up to 10 s).  close() is a semantic alias that also flushes
+    # with a shorter timeout, signalling intent to the reader.
+    kafka_producer.flush()
+    kafka_producer.close()
 
 
 # ══════════════════════════════════════════════════════════════════════

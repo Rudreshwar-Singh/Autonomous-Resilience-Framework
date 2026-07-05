@@ -74,6 +74,11 @@ backend/logs/*.log
 # ══════════════════════════════════════════════════════════════════════
 .cursorrules
 .cursor/
+.gemini/
+.agents/
+brain/
+AGENTS.md
+CLAUDE.md
 PROJECT_BIBLE/99_ai_rules.md
 frontend/AGENTS.md
 frontend/CLAUDE.md

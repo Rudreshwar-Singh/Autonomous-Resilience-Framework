@@ -5,4 +5,4 @@ Write-Host ""
 Write-Host "Swagger UI available at: http://127.0.0.1:8000/docs" -ForegroundColor Green
 Write-Host ""
 
-uvicorn backend.app.main:app --reload
+backend\.venv\Scripts\uvicorn.exe backend.app.main:app --reload

@@ -14,8 +14,8 @@ WHY THIS DESIGN:
 
 FUTURE EXTENSIBILITY:
     As new phases are built, add new fields here:
-    - Phase 2: KAFKA_BOOTSTRAP_SERVERS, KAFKA_TOPIC_TELEMETRY
-    - Phase 5: PROMETHEUS_PORT, GRAFANA_URL
+    - Phase 5 (Current): KAFKA_BOOTSTRAP_SERVERS, KAFKA_TOPIC_TELEMETRY
+    - Phase 6: PROMETHEUS_PORT, GRAFANA_URL
     - Phase 7: GEMINI_API_KEY, LLM_MODEL_NAME, LLM_TEMPERATURE
 """
 
@@ -43,6 +43,10 @@ class Settings(BaseSettings):
         LOG_LEVEL: Minimum severity level for structured log output.
         LOG_FORMAT: Output format for logs — 'json' for machine parsing,
                     'text' for local development readability.
+        KAFKA_BOOTSTRAP_SERVERS: Comma-separated list of Kafka broker addresses.
+                                  Matches the Docker-Compose service on port 9092
+                                  for local dev; override per environment.
+        KAFKA_TOPIC_TELEMETRY: The Kafka topic name for inbound telemetry events.
     """
 
     # ── Application Identity ──────────────────────────────────────────
@@ -65,6 +69,12 @@ class Settings(BaseSettings):
     # ── Logging ───────────────────────────────────────────────────────
     LOG_LEVEL: str = "DEBUG"
     LOG_FORMAT: str = "json"  # 'json' for pipeline compatibility, 'text' for dev
+
+    # ── Kafka ─────────────────────────────────────────────────────────
+    # Matches the Dockerised broker defined in infra/docker-compose.yml.
+    # Override via environment variable for staging/production brokers.
+    KAFKA_BOOTSTRAP_SERVERS: str = "localhost:9092"
+    KAFKA_TOPIC_TELEMETRY: str = "system-telemetry"
 
     # ── Pydantic Model Configuration ──────────────────────────────────
     # Tells Pydantic to read from a .env file if one exists, and to
