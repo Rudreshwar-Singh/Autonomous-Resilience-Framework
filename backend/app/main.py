@@ -65,7 +65,7 @@ from backend.core.settings import get_settings
 # Each router is self-contained: it declares its own prefix, tags, and
 # endpoints. main.py only mounts them — it never inspects their internals.
 # This enforces the bounded-context principle from 01_architecture.md.
-from backend.app.routers import agent, health, incident, telemetry
+from backend.app.routers import agent, graph, health, incident, telemetry
 from backend.app.services.kafka_producer import KafkaProducerService
 
 # ── Module-level logger ───────────────────────────────────────────────
@@ -93,7 +93,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     FUTURE PHASES will add initialization here:
         - Kafka producer connection pool
-        - NetworkX graph state initialization
+        - NetworkX graph state initialization  ← Phase 6 app.state.graph_cache
         - LLM client warm-up (Gemini/Groq)
         - Prometheus instrumentation registration
     """
@@ -123,6 +123,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.KAFKA_BOOTSTRAP_SERVERS,
         settings.KAFKA_TOPIC_TELEMETRY,
     )
+
+    # ── Phase 6: Graph cache — initialised as None ─────────────────────────
+    # The Analysis domain (GraphAnalyzer) is stateless per-request, but the
+    # last computed GraphPayload is cached here so GET /api/v1/graph/topology
+    # can serve the frontend without reprocessing on every poll cycle.
+    app.state.graph_cache = None
+    logger.info("Graph cache initialised — ready for Phase 6 Analysis domain")
 
     yield  # ← Application serves requests here
 
@@ -173,7 +180,7 @@ app: FastAPI = FastAPI(
         },
         {
             "name": "Analysis",
-            "description": "Dependency graph state and topology queries.",
+            "description": "NetworkX dependency graph construction, topology queries, and root-cause analysis.",
         },
         {
             "name": "Agent",
@@ -216,6 +223,8 @@ app.include_router(incident.router)
 app.include_router(health.router)
 app.include_router(telemetry.router)
 app.include_router(agent.router)
+# Phase 6: Analysis domain — dependency graph topology endpoints
+app.include_router(graph.router)
 
 
 # ══════════════════════════════════════════════════════════════════════
