@@ -288,6 +288,13 @@ curl -X POST http://127.0.0.1:8000/api/v1/graph/analyze \
 curl http://127.0.0.1:8000/api/v1/graph/topology
 ```
 
+### Phase 8 — Run the Unit Tests
+
+```bash
+# Run the test harness locally with pytest
+python -m pytest tests/unit/ -v
+```
+
 ---
 
 ## 📈 Development Roadmap
@@ -301,8 +308,8 @@ curl http://127.0.0.1:8000/api/v1/graph/topology
 | **4** | Frontend Dashboard — Next.js + shadcn/ui observability UI | ✅ Complete |
 | **5** | Telemetry Pipeline — Kafka producer/consumer for log streaming | ✅ Complete |
 | **6** | NetworkX Brain — Dependency graph construction from telemetry data | ✅ Complete |
-| **7** | AI Agent — LLM-powered diagnosis & deterministic remediation engine | ⬚ Planned |
-| **8** | Testing Suite — Pytest unit, integration, and load tests | ⬚ Planned |
+| **7** | AI Agent — LLM-powered diagnosis & deterministic remediation engine | ✅ Complete |
+| **8** | Testing Suite — Pytest unit, integration, and load tests | ✅ Complete |
 | **9** | Presentation — Demo deck, live walkthrough script, fault scenarios | ⬚ Planned |
 
 ---
