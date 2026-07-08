@@ -49,6 +49,7 @@ out/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.tsbuildinfo
 
 # ══════════════════════════════════════════════════════════════════════
 # Docker
@@ -90,3 +91,6 @@ claude_prompts.md
 # ══════════════════════════════════════════════════════════════════════
 *.bak
 *.tmp
+
+# Ignore internal presentation files
+presentation/

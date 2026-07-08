@@ -2,7 +2,6 @@
 
 # 🛡️ Autonomous Resilience Framework
 
-### `[WIP — Active Development]`
 
 **A self-healing distributed systems engine that autonomously detects, diagnoses, and remediates cascading infrastructure failures using real-time telemetry analysis, dynamic dependency graph mapping, and LLM-powered remediation agents.**
 
@@ -23,7 +22,8 @@
 - [Technology Stack](#-technology-stack)
 - [Project Structure](#-project-structure)
 - [Getting Started](#-getting-started)
-- [Development Roadmap](#-development-roadmap)
+- [Demo Guide](#-demo-guide)
+- [Implementation Phases](#-implementation-phases)
 - [Future Evolution](#-future-evolution)
 - [Contributing](#-contributing)
 
@@ -297,7 +297,7 @@ python -m pytest tests/unit/ -v
 
 ---
 
-## 📈 Development Roadmap
+## 📈 Implementation Phases
 
 | Phase | Milestone | Status |
 |-------|-----------|--------|
@@ -310,7 +310,7 @@ python -m pytest tests/unit/ -v
 | **6** | NetworkX Brain — Dependency graph construction from telemetry data | ✅ Complete |
 | **7** | AI Agent — LLM-powered diagnosis & deterministic remediation engine | ✅ Complete |
 | **8** | Testing Suite — Pytest unit, integration, and load tests | ✅ Complete |
-| **9** | Presentation — Demo deck, live walkthrough script, fault scenarios | ⬚ Planned |
+| **9** | Presentation — Demo deck, live walkthrough script, fault scenarios | ✅ Complete |
 
 ---
 
@@ -363,6 +363,98 @@ This project is under active development. Contributions, suggestions, and feedba
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+---
+
+## 🎬 Demo Guide
+
+This section provides a reproducible, step-by-step process to trigger the **payment cascade failure** scenario used in live demos and presentations.
+
+### The Scenario: `payment_timeout.json`
+
+File location: `data/fault_scenarios/payment_timeout.json`
+
+This scenario simulates a real-world cascading failure on a payment critical path:
+
+```
+Client → API-Gateway → Checkout-Service → Payment-Gateway → Payment-DB
+                                               ↑ DEGRADED       ↑ FAILED (DB_TIMEOUT_ERROR)
+```
+
+The `Payment-DB` connection pool exhausts (all 20 connections), causing `Payment-Gateway` to degrade (4,800ms latency), which collapses `Checkout-Service` with HTTP 500, propagating back to the `API-Gateway`.
+
+---
+
+### Step 1 — Start the Stack
+
+```powershell
+# From the project root — spins up FastAPI + Kafka + Zookeeper
+docker-compose -f infra/docker/docker-compose.yml up -d
+
+# Verify the API is healthy
+curl http://localhost:8000/health
+```
+
+### Step 2 — Set Your Gemini API Key
+
+```powershell
+# Windows PowerShell
+$env:GEMINI_API_KEY = "AIza..."
+
+# macOS / Linux
+export GEMINI_API_KEY="AIza..."
+```
+
+> Get a free key at [aistudio.google.com](https://aistudio.google.com)
+
+### Step 3 — Inject the Fault Scenario
+
+```powershell
+# Inject the full cascading payment failure (5 trace events, one HTTP call)
+curl -X POST http://localhost:8000/api/v1/telemetry/trace/batch `
+     -H "Content-Type: application/json" `
+     -d "@data/fault_scenarios/payment_timeout.json"
+```
+
+**Expected response:** HTTP 200 with a summary of ingested events.
+
+### Step 4 — Inspect the Dependency Graph
+
+```powershell
+# Fetch the live NetworkX graph as JSON
+curl http://localhost:8000/api/v1/graph/topology | python -m json.tool
+```
+
+You will see `Payment-DB` marked `status: failed` and `Payment-Gateway` marked `status: degraded` in the nodes list.
+
+### Step 5 — Trigger the AI Agent
+
+```powershell
+# Post the current graph state to the Gemini Decision Engine
+# (also available via POST /api/v1/agent/remediate in Swagger UI at http://localhost:8000/docs)
+curl -X POST http://localhost:8000/api/v1/agent/remediate `
+     -H "Content-Type: application/json" `
+     -d '{"graph_payload": <paste topology JSON here>, "error_traceback": null}'
+```
+
+**Expected output — a fully typed `RemediationPlan`:**
+
+```json
+{
+  "root_cause": "Payment-DB experienced a DB_TIMEOUT_ERROR with full connection pool exhaustion...",
+  "impacted_nodes": ["Payment-DB", "Payment-Gateway", "Checkout-Service", "API-Gateway"],
+  "suggested_action": "1. Increase Payment-DB connection pool. 2. Enable circuit breaker on Payment-Gateway...",
+  "target_service": "Payment-DB"
+}
+```
+
+### Presentation Assets
+
+| Asset | Location |
+|---|---|
+| Fault Scenario JSON | `data/fault_scenarios/payment_timeout.json` |
+| 3-minute spoken demo script | `presentation/demo_script.md` |
+| 5-slide deck outline | `presentation/slide_deck_outline.md` |
 
 ---
 

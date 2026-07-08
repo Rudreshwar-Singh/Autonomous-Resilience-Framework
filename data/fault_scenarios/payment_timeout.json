@@ -1,0 +1,69 @@
+﻿[
+  {
+    "trace_id": "trace-pay-9001",
+    "timestamp": "2026-07-06T11:00:00.000000Z",
+    "source_node": "Client",
+    "target_node": "API-Gateway",
+    "status": "success",
+    "error_metadata": null
+  },
+  {
+    "trace_id": "trace-pay-9001",
+    "timestamp": "2026-07-06T11:00:00.050000Z",
+    "source_node": "API-Gateway",
+    "target_node": "Checkout-Service",
+    "status": "success",
+    "error_metadata": null
+  },
+  {
+    "trace_id": "trace-pay-9001",
+    "timestamp": "2026-07-06T11:00:00.120000Z",
+    "source_node": "Checkout-Service",
+    "target_node": "Payment-Gateway",
+    "status": "degraded",
+    "error_metadata": {
+      "error_code": "UPSTREAM_TIMEOUT",
+      "message": "Payment-Gateway upstream call exceeded SLO threshold — response time 4800ms (SLO: 500ms)",
+      "latency_ms": 4800.0,
+      "extra": {
+        "http_status": 504,
+        "retry_count": 3
+      }
+    }
+  },
+  {
+    "trace_id": "trace-pay-9001",
+    "timestamp": "2026-07-06T11:00:05.021000Z",
+    "source_node": "Payment-Gateway",
+    "target_node": "Payment-DB",
+    "status": "failed",
+    "error_metadata": {
+      "error_code": "DB_TIMEOUT_ERROR",
+      "message": "Connection pool exhausted — Payment-DB failed to respond within 5000ms. All 20 connections timed out.",
+      "latency_ms": 5000.0,
+      "extra": {
+        "pool_size": 20,
+        "active_connections": 20,
+        "queue_depth": 87,
+        "db_host": "payment-db.internal"
+      }
+    }
+  },
+  {
+    "trace_id": "trace-pay-9001",
+    "timestamp": "2026-07-06T11:00:05.025000Z",
+    "source_node": "Checkout-Service",
+    "target_node": "API-Gateway",
+    "status": "failed",
+    "error_metadata": {
+      "error_code": "500_INTERNAL_SERVER_ERROR",
+      "message": "Checkout-Service returned HTTP 500 after Payment-Gateway cascade failure. Transaction ID txn-8812-XYZ aborted.",
+      "latency_ms": 4910.0,
+      "extra": {
+        "http_status": 500,
+        "transaction_id": "txn-8812-XYZ",
+        "rollback_triggered": true
+      }
+    }
+  }
+]
